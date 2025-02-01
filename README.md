@@ -24,7 +24,7 @@ cd Linux-LFI
 
 ### Build the Scanner
 ```sh
-go . build -o lfi-scanner
+go build linux-lfi.go
 ```
 
 ### Run the Scanner
