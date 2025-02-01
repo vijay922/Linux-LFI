@@ -65,12 +65,16 @@ This tool is for **educational and ethical security testing** only. Do not use i
 ## License
 [MIT License](LICENSE)
 
-<h2 id="donate" align=''> Support⚡️</h2>
+<h2 id="donate" align="center">⚡️ Support</h2>
 
 <details>
-<summary>Buy Me A Coffee</summary>
+<summary>☕ Buy Me A Coffee</summary>
 
-<p align="center"><a href="[https://buymeacoffee.com/vijay922](https://buymeacoffee.com/vijay922)"><img  src="https://img.shields.io/badge/Buy%20Me%20a%20Coffee-ffdd00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black"/></a></p>
+<p align="center">
+  <a href="https://buymeacoffee.com/vijay922">
+    <img src="https://img.shields.io/badge/Buy%20Me%20a%20Coffee-ffdd00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black"/>
+  </a>
+</p>
 
 </details>
 
@@ -78,9 +82,8 @@ This tool is for **educational and ethical security testing** only. Do not use i
   <b><i>"Keep pushing forward. Never surrender."</i></b>
 </p>
 
-<p align="center">
-<a>🌱</a>
-</p>
+<p align="center">🌱</p>
+
 
 
 ## Author
