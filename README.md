@@ -65,6 +65,24 @@ This tool is for **educational and ethical security testing** only. Do not use i
 ## License
 [MIT License](LICENSE)
 
+<h2 id="donate" align=''> Support⚡️</h2>
+
+<details>
+<summary>Buy Me A Coffee</summary>
+
+<p align="center"><a href="[https://buymeacoffee.com/coffinxp](https://buymeacoffee.com/vijay922)"><img  src="https://img.shields.io/badge/Buy%20Me%20a%20Coffee-ffdd00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black"/></a></p>
+
+</details>
+
+<p align="center">
+  <b><i>"Keep pushing forward. Never surrender."</i></b>
+</p>
+
+<p align="center">
+<a>🌱</a>
+</p>
+
+
 ## Author
 [chippa vijay kumar](https://github.com/vijay922)
 
