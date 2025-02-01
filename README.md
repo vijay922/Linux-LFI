@@ -70,7 +70,7 @@ This tool is for **educational and ethical security testing** only. Do not use i
 <details>
 <summary>Buy Me A Coffee</summary>
 
-<p align="center"><a href="[https://buymeacoffee.com/coffinxp](https://buymeacoffee.com/vijay922)"><img  src="https://img.shields.io/badge/Buy%20Me%20a%20Coffee-ffdd00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black"/></a></p>
+<p align="center"><a href="[https://buymeacoffee.com/vijay922](https://buymeacoffee.com/vijay922)"><img  src="https://img.shields.io/badge/Buy%20Me%20a%20Coffee-ffdd00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black"/></a></p>
 
 </details>
 
