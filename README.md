@@ -18,18 +18,18 @@ Ensure you have **Go installed** on your system.
 
 ### Clone the Repository
 ```sh
-git clone https://github.com/yourusername/path-traversal-scanner.git
-cd path-traversal-scanner
+git clone [https://github.com/yourusername/path-traversal-scanner](https://github.com/vijay922/Linux-LFI).git
+cd Linux-LFI
 ```
 
 ### Build the Scanner
 ```sh
-go build -o scanner
+go build -o lfi-scanner
 ```
 
 ### Run the Scanner
 ```sh
-./scanner -l urls.txt -v -o results.txt
+./lfi-scanner -l urls.txt -v -o results.txt
 ```
 
 ### Command-Line Arguments
