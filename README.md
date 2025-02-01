@@ -25,11 +25,12 @@ cd Linux-LFI
 ### Build the Scanner
 ```sh
 go build linux-lfi.go
+mv linux-lfi /usr/local/bin
 ```
 
 ### Run the Scanner
 ```sh
-./lfi-scanner -l urls.txt -v -o results.txt
+$ linux-lfi -l urls.txt -v -o results.txt
 ```
 
 ### Command-Line Arguments
