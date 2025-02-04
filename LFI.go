@@ -9,6 +9,7 @@ import (
 	"os"
 	"path"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -47,6 +48,7 @@ func main() {
 	urlFile := flag.String("l", "", "Path to the file containing URLs")
 	verbose := flag.Bool("v", false, "Enable verbose output")
 	outputFile := flag.String("o", "", "Path to the output file for results")
+	workers := flag.Int("w", 20, "Number of concurrent workers")
 	flag.Parse()
 
 	if *urlFile == "" {
@@ -68,27 +70,46 @@ func main() {
 		},
 	}
 
-	var results []string
+	var (
+		results     []string
+		resultsLock sync.Mutex
+		wg          sync.WaitGroup
+		jobs        = make(chan string, *workers*2)
+	)
 
+	// Start worker goroutines
+	for i := 0; i < *workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for testURL := range jobs {
+				vulnerable, err := checkVulnerability(client, testURL, *verbose)
+				if err != nil && *verbose {
+					fmt.Printf("Error checking %s: %v\n", testURL, err)
+				}
+				if vulnerable {
+					msg := fmt.Sprintf("[VULNERABLE] %s", testURL)
+					resultsLock.Lock()
+					results = append(results, msg)
+					resultsLock.Unlock()
+					fmt.Println(msg)
+				} else if *verbose {
+					fmt.Printf("[SAFE] %s\n", testURL)
+				}
+			}
+		}()
+	}
+
+	// Generate jobs
 	for _, rawURL := range urls {
 		testURLs := generateTestURLs(rawURL)
 		for _, testURL := range testURLs {
-			vulnerable, err := checkVulnerability(client, testURL, *verbose)
-			if err != nil {
-				if *verbose {
-					fmt.Printf("Error checking %s: %v\n", testURL, err)
-				}
-				continue
-			}
-			if vulnerable {
-				msg := fmt.Sprintf("[VULNERABLE] %s", testURL)
-				results = append(results, msg)
-				fmt.Println(msg)
-			} else if *verbose {
-				fmt.Printf("[SAFE] %s\n", testURL)
-			}
+			jobs <- testURL
 		}
 	}
+
+	close(jobs)
+	wg.Wait()
 
 	if *outputFile != "" {
 		err := saveResults(*outputFile, results)
@@ -217,4 +238,13 @@ func saveResults(filename string, results []string) error {
 		}
 	}
 	return writer.Flush()
+}
+
+func init() {
+	flag.Usage = func() {
+		fmt.Fprintf(flag.CommandLine.Output(), "Usage of %s:\n", os.Args[0])
+		flag.PrintDefaults()
+		fmt.Println("\nExample:")
+		fmt.Println("  ./path_traversal -l urls.txt -w 100 -v -o results.txt")
+	}
 }
