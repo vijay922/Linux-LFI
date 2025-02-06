@@ -168,7 +168,10 @@ func worker(jobs <-chan string, results chan<- Result, verbose bool) {
 	for testURL := range jobs {
 		req, err := http.NewRequest("GET", testURL, nil)
 		if err != nil {
-			continue
+			if verbose {
+				fmt.Printf("Error creating request for %s: %v\n", testURL, err)
+			}
+			continue // Skip this URL and move to the next one
 		}
 
 		req.Header.Set("Accept-Encoding", "gzip, deflate, br")
@@ -181,41 +184,51 @@ func worker(jobs <-chan string, results chan<- Result, verbose bool) {
 		reqDump, _ := httputil.DumpRequestOut(req, false)
 
 		resp, err := client.Do(req)
-		var respDump strings.Builder
 		if err != nil {
-			respDump.WriteString(fmt.Sprintf("Error: %v\n", err))
-		} else {
-			defer resp.Body.Close()
-
-			var bodyReader io.Reader = resp.Body
-			if resp.Header.Get("Content-Encoding") == "gzip" {
-				bodyReader, err = gzip.NewReader(resp.Body)
-				if err != nil {
-					respDump.WriteString(fmt.Sprintf("Error decompressing gzip: %v\n", err))
-					continue
-				}
+			if verbose {
+				fmt.Printf("Error requesting %s: %v\n", testURL, err)
 			}
+			continue // Skip this URL and move to the next one
+		}
+		defer resp.Body.Close()
 
-			bodyBytes, _ := ioutil.ReadAll(bodyReader)
-			body := string(bodyBytes)
-
-			respDump.WriteString(fmt.Sprintf("HTTP/1.1 %s\r\n", resp.Status))
-			for k, vv := range resp.Header {
-				for _, v := range vv {
-					respDump.WriteString(fmt.Sprintf("%s: %s\r\n", k, v))
+		var respDump strings.Builder
+		var bodyReader io.Reader = resp.Body
+		if resp.Header.Get("Content-Encoding") == "gzip" {
+			bodyReader, err = gzip.NewReader(resp.Body)
+			if err != nil {
+				if verbose {
+					fmt.Printf("Error decompressing gzip for %s: %v\n", testURL, err)
 				}
+				continue // Skip this URL and move to the next one
 			}
-			respDump.WriteString("\r\n")
-			respDump.Write(bodyBytes)
+		}
 
-			vulnerable := linuxRegex.MatchString(body) || windowsRegex.MatchString(body)
-			if vulnerable {
-				results <- Result{
-					TestURL:      testURL,
-					Vulnerable:   true,
-					RequestDump:  string(reqDump),
-					ResponseDump: respDump.String(),
-				}
+		bodyBytes, err := ioutil.ReadAll(bodyReader)
+		if err != nil {
+			if verbose {
+				fmt.Printf("Error reading response body for %s: %v\n", testURL, err)
+			}
+			continue // Skip this URL and move to the next one
+		}
+		body := string(bodyBytes)
+
+		respDump.WriteString(fmt.Sprintf("HTTP/1.1 %s\r\n", resp.Status))
+		for k, vv := range resp.Header {
+			for _, v := range vv {
+				respDump.WriteString(fmt.Sprintf("%s: %s\r\n", k, v))
+			}
+		}
+		respDump.WriteString("\r\n")
+		respDump.Write(bodyBytes)
+
+		vulnerable := linuxRegex.MatchString(body) || windowsRegex.MatchString(body)
+		if vulnerable {
+			results <- Result{
+				TestURL:      testURL,
+				Vulnerable:   true,
+				RequestDump:  string(reqDump),
+				ResponseDump: respDump.String(),
 			}
 		}
 
