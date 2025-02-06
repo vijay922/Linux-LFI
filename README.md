@@ -1,16 +1,18 @@
-# Linux Path Traversal Vulnerability Scanner
+# Path Traversal Vulnerability Scanner
 
 ## Overview
-This Go script is designed to detect **path traversal vulnerabilities** in web applications by testing various URL payloads that attempt to access the `/etc/passwd` file on a target server.
+This Go-based scanner is designed to identify **Path Traversal** vulnerabilities in web applications. It systematically tests URLs with various payloads that attempt to access sensitive system files (e.g., `/etc/passwd` on Linux or `win.ini` on Windows). The scanner performs automated checks, detects vulnerable endpoints, and logs the results.
+
 
 ## Features
 - Reads a list of target URLs from a file.
-- Generates different path traversal payloads.
-- Tests path traversal attacks in both **URL paths** and **query parameters**.
-- Identifies vulnerable URLs based on the presence of `root:x:0:0:` in the response.
-- Supports verbose output (`-v`) to display scan details.
-- Saves results to a file if specified (`-o`).
-- Uses a custom **User-Agent** to mimic a real browser.
+- Supports multiple **payloads** for path traversal exploitation.
+- Concurrent scanning with configurable worker threads.
+- Supports **verbose mode** for detailed request-response logging.
+- Saves vulnerable results to an output file.
+- Handles **gzip-compressed** responses.
+- Bypasses common path traversal filtering techniques.
+- Skips SSL certificate verification for HTTPS targets.
 
 ## Installation & Usage
 ### Prerequisites
@@ -42,10 +44,11 @@ $ linux-lfi -l urls.txt -v -o results.txt
 
 ## How It Works
 1. **Reads URLs** from the provided file.
-2. **Generates test URLs** by injecting different path traversal payloads.
-3. **Sends HTTP GET requests** using a custom User-Agent.
-4. **Analyzes responses** to check if they contain the `/etc/passwd` file contents.
-5. **Logs and saves results** of vulnerable URLs.
+2. **Generates test URLs** by injecting path traversal payloads.
+3. **Performs HTTP requests** with crafted payloads.
+4. **Parses responses** and checks for system file leakage (e.g., `/etc/passwd`, `win.ini`).
+5. **Logs vulnerable URLs** if sensitive content is detected.
+6. **Saves results** to an output file (if specified).
 
 ## Example URL Payloads Tested
 - `../../../../etc/passwd`
@@ -56,8 +59,16 @@ $ linux-lfi -l urls.txt -v -o results.txt
 
 ## Output Example
 ```
-[VULNERABLE] http://example.com/download?file=../../../../etc/passwd
-[SAFE] http://example.com/view?id=123
+Vulnerable URL: http://example.com/download?file=../../../../etc/passwd
+Request:
+GET /download?file=../../../../etc/passwd HTTP/1.1
+Host: example.com
+...
+
+Response:
+HTTP/1.1 200 OK
+...
+root:x:0:0:root:/root:/bin/bash
 ```
 
 ## Disclaimer
